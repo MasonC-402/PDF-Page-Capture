@@ -4,18 +4,46 @@ Click through a PDF viewer page by page, screenshot each page, and optionally co
 
 It drives your real mouse and keyboard and captures the screen, so it works with almost any viewer: browser-embedded viewers, web document sites, Adobe Reader, Edge, and so on.
 
-## Requirements
+## Windows: download and run (no install)
+
+> [!IMPORTANT]
+> **Windows will probably warn you the first time you open the app. This is expected.**
+>
+> A blue box saying **"Windows protected your PC"** will pop up. Windows shows this for any app that hasn't paid for a code-signing certificate, which most small free tools haven't. It doesn't mean Windows found anything wrong with the app.
+>
+> To open it anyway:
+>
+> 1. Click **More info** (the small link under the message).
+> 2. Click the **Run anyway** button that appears.
+>
+> You only need to do this once. Your browser may also ask whether to keep the download. Choose **Keep**.
+
+1. Go to the [**Releases**](https://github.com/MasonC-402/PDF-Page-Capture/releases/latest) page and download **PDF-Page-Capture.exe**.
+2. Double-click it. If you see **"Windows protected your PC"**, click **More info → Run anyway** (see the note above).
+3. Open your document in its viewer and go to **page 1**.
+4. In the app:
+   - **1. How to turn the page:** click **Set Next button**, then hover the mouse over the viewer's Next-page arrow until the countdown finishes. Or choose **Press a key** if the viewer turns pages with the arrow keys.
+   - **2. What to capture:** click **Set capture area**, then hover over the **top-left** corner of the page, then the **bottom-right** corner.
+   - Choose where to save (it defaults to `Documents\PDF Page Capture`).
+5. Click **Start**. The window minimizes and capturing begins after 5 seconds. Don't touch the mouse or keyboard until it finishes.
+6. When it's done, the window comes back and offers to open the folder with your pages and `combined.pdf`.
+
+To stop early, slam the mouse into any corner of the screen. The app remembers your settings for next time.
+
+## Requirements (running from source)
 
 - Python 3.9+
 - `pyautogui` and `pillow`
 
 ```
-pip install pyautogui pillow
+pip install -r requirements.txt
 ```
+
+For a windowed version instead of terminal prompts, run `python pdf_page_capture_gui.py`. This is the same app as the Windows download.
 
 **macOS:** give your terminal app **Screen Recording** and **Accessibility** permissions (System Settings → Privacy & Security), or screenshots come out blank and clicks don't register.
 
-**Windows:** if you use display scaling, run the script with the viewer on the same monitor so coordinates line up.
+**Windows:** if you use display scaling with the command-line script, keep the viewer on the same monitor so coordinates line up. (The downloadable app handles scaling automatically.)
 
 ## Quick start
 
@@ -135,6 +163,17 @@ ocrmypdf pdf_pages/combined.pdf pdf_pages/searchable.pdf
 | Mouse cursor in screenshots | Add `--park-mouse`. |
 | Blank or black screenshots | On macOS, check Screen Recording permission. Otherwise the viewer may block screen capture. |
 | Clicks land in the wrong place | The window moved or the zoom changed since setup. Rerun setup without the saved coordinates. |
+
+## Publishing a new Windows release
+
+The GitHub Actions workflow in `.github/workflows/release.yml` builds `PDF-Page-Capture.exe` on Windows and attaches it to a GitHub Release whenever you push a version tag:
+
+```
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+To build a test exe without publishing a release, run the workflow manually from the **Actions** tab (**Build Windows app → Run workflow**), then download the exe from that run's **Artifacts**.
 
 ## Notes
 

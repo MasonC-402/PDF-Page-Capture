@@ -24,14 +24,18 @@ or pressing Ctrl+C in the terminal.
 
 import argparse
 import sys
+import threading
 import time
 from pathlib import Path
+from typing import Callable
 
 try:
     import pyautogui
     from PIL import Image, ImageChops
 except ImportError:
-    sys.exit("Missing dependencies. Run: pip install pyautogui pillow")
+    if __name__ == "__main__":
+        sys.exit("Missing dependencies. Run: pip install pyautogui pillow")
+    raise
 
 pyautogui.FAILSAFE = True  # move mouse to a screen corner to abort
 
@@ -61,6 +65,82 @@ def images_match(a: Image.Image, b: Image.Image, tolerance: int) -> bool:
     return bbox is None
 
 
+def run_capture(
+    out: Path,
+    next_pos: tuple[int, int] | None = None,
+    key: str | None = None,
+    region: tuple[int, int, int, int] | None = None,
+    reveal_pos: tuple[int, int] | None = None,
+    delay: float = 1.5,
+    max_pages: int = 1000,
+    same_limit: int = 2,
+    tolerance: int = 10,
+    park_mouse: bool = False,
+    reveal_delay: float = 1.0,
+    make_pdf: bool = False,
+    log: Callable[[str], None] = print,
+    stop_event: threading.Event | None = None,
+) -> list[Path]:
+    """Screenshot pages until the document stops changing. Returns the saved image paths."""
+    out.mkdir(parents=True, exist_ok=True)
+
+    # Where to park the mouse so it doesn't appear in screenshots
+    screen_w, screen_h = pyautogui.size()
+    park = (screen_w - 5, screen_h // 2)
+
+    saved: list[Path] = []
+    prev = None
+    same_count = 0
+
+    try:
+        for page in range(1, max_pages + 1):
+            if stop_event is not None and stop_event.is_set():
+                log("Stopped by user.")
+                break
+            if reveal_pos:
+                pyautogui.click(*reveal_pos)
+                time.sleep(reveal_delay)
+            if park_mouse:
+                pyautogui.moveTo(*park)
+            shot = pyautogui.screenshot(region=region)
+
+            if prev is not None and images_match(prev, shot, tolerance):
+                same_count += 1
+                log(f"  page didn't change ({same_count}/{same_limit})")
+                if same_count >= same_limit:
+                    log("Reached the end of the document.")
+                    break
+            else:
+                same_count = 0
+                path = out / f"page_{len(saved) + 1:04d}.png"
+                shot.save(path)
+                saved.append(path)
+                log(f"Saved {path}")
+
+            prev = shot
+
+            # Advance to the next page
+            if key:
+                pyautogui.press(key)
+            else:
+                pyautogui.click(*next_pos)
+            time.sleep(delay)
+        else:
+            log(f"Hit max pages limit ({max_pages}).")
+    except (KeyboardInterrupt, pyautogui.FailSafeException):
+        log("Stopped by user.")
+
+    log(f"\nDone: {len(saved)} pages saved to {out.resolve()}")
+
+    if make_pdf and saved:
+        imgs = [Image.open(p).convert("RGB") for p in saved]
+        pdf_path = out / "combined.pdf"
+        imgs[0].save(pdf_path, save_all=True, append_images=imgs[1:])
+        log(f"Combined PDF: {pdf_path.resolve()}")
+
+    return saved
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Screenshot every page of a PDF viewer.")
     ap.add_argument("--out", default="pdf_pages", help="Output folder (default: pdf_pages)")
@@ -87,7 +167,6 @@ def main() -> None:
     args = ap.parse_args()
 
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
 
     # --- How to advance -----------------------------------------------------
     next_pos = None
@@ -126,56 +205,20 @@ def main() -> None:
     input("\nMake sure the PDF is on PAGE 1 and the viewer window is visible. Press Enter to start.")
     countdown(3, "Starting")
 
-    # Where to park the mouse so it doesn't appear in screenshots
-    screen_w, screen_h = pyautogui.size()
-    park = (screen_w - 5, screen_h // 2)
-
-    saved: list[Path] = []
-    prev = None
-    same_count = 0
-
-    try:
-        for page in range(1, args.max_pages + 1):
-            if reveal_pos:
-                pyautogui.click(*reveal_pos)
-                time.sleep(args.reveal_delay)
-            if args.park_mouse:
-                pyautogui.moveTo(*park)
-            shot = pyautogui.screenshot(region=region)
-
-            if prev is not None and images_match(prev, shot, args.tolerance):
-                same_count += 1
-                print(f"  page didn't change ({same_count}/{args.same_limit})")
-                if same_count >= args.same_limit:
-                    print("Reached the end of the document.")
-                    break
-            else:
-                same_count = 0
-                path = out / f"page_{len(saved) + 1:04d}.png"
-                shot.save(path)
-                saved.append(path)
-                print(f"Saved {path}")
-
-            prev = shot
-
-            # Advance to the next page
-            if args.key:
-                pyautogui.press(args.key)
-            else:
-                pyautogui.click(*next_pos)
-            time.sleep(args.delay)
-        else:
-            print(f"Hit --max-pages limit ({args.max_pages}).")
-    except (KeyboardInterrupt, pyautogui.FailSafeException):
-        print("\nStopped by user.")
-
-    print(f"\nDone: {len(saved)} pages saved to {out.resolve()}")
-
-    if args.make_pdf and saved:
-        imgs = [Image.open(p).convert("RGB") for p in saved]
-        pdf_path = out / "combined.pdf"
-        imgs[0].save(pdf_path, save_all=True, append_images=imgs[1:])
-        print(f"Combined PDF: {pdf_path.resolve()}")
+    run_capture(
+        out=out,
+        next_pos=next_pos,
+        key=args.key,
+        region=region,
+        reveal_pos=reveal_pos,
+        delay=args.delay,
+        max_pages=args.max_pages,
+        same_limit=args.same_limit,
+        tolerance=args.tolerance,
+        park_mouse=args.park_mouse,
+        reveal_delay=args.reveal_delay,
+        make_pdf=args.make_pdf,
+    )
 
 
 if __name__ == "__main__":
